@@ -9,8 +9,8 @@ run without shutting down, how long it tends to stay on or off once it starts a 
 how quickly it can change output, and how its fuel efficiency changes across its
 operating range. These “operational characteristics” (sometimes called unit
 commitment parameters) aren’t reported directly by EIA or FERC, so PUDL estimates them
-empirically from [EPA Hourly Continuous Emission Monitoring System (CEMS)](../data_sources/epacems.md) hourly generation and fuel data, in the
-[out_epacems_\_yearly_operational_characteristics](../data_dictionaries/pudl_db.md#out-epacems-yearly-operational-characteristics) table.
+empirically from [EPA Hourly Continuous Emission Monitoring System (CEMS)](../data_sources/epacems.html.md) hourly generation and fuel data, in the
+[out_epacems_\_yearly_operational_characteristics](../data_dictionaries/pudl_db.html.md#out-epacems-yearly-operational-characteristics) table.
 
 This methodology and its original implementation were generously contributed to PUDL by
 [Sylvan Energy](https://sylvan.energy), with support for integration from [GridLab](https://gridlab.org),. We’ve adapted Sylvan Energy’s analysis to run automatically
@@ -21,15 +21,18 @@ suit your use case. [Feedback Welcome](#feedback-welcome)!
 
 This analysis processes several years of hourly readings for every EPA CEMS unit in the
 country using [polars](https://pola.rs), a vectorized DataFrame library, reading the
-input data from [Apache Parquet](https://parquet.apache.org/docs/) files. The full
-calculation completes in 1-3 minutes and peaks at around 16 GB of memory.
+input data from [Apache Parquet](https://parquet.apache.org/docs/) files. Computing a
+single calendar year’s estimates for every state takes on the order of a minute; the
+full table, covering every calendar year with enough EPA CEMS history behind it, takes
+correspondingly longer, peaking at around 16 GB of memory regardless of how many years
+are included.
 
 ## Scope: EPA CEMS Units, Gross Generation
 
 These estimates describe individual EPA CEMS “emissions units” (aka smokestacks),
 identified by `plant_id_epa` and `emissions_unit_id_epa`, **not** EIA generators. A
 CEMS unit doesn’t always correspond one-to-one with an EIA generator; see
-[core_epa_\_assn_eia_epacamd](../data_dictionaries/pudl_db.md#core-epa-assn-eia-epacamd) if you need to connect these characteristics to EIA
+[core_epa_\_assn_eia_epacamd](../data_dictionaries/pudl_db.html.md#core-epa-assn-eia-epacamd) if you need to connect these characteristics to EIA
 generator-level records.
 
 Only fossil-fuel combustion units over 25 MW are required to report to EPA CEMS, so
@@ -46,12 +49,22 @@ in PUDL.
 
 ## A Rolling Window
 
-This table recomputes a single snapshot of each unit’s characteristics from a rolling
-window of the most recent EPA CEMS data available – in production, the three most
-recently completed calendar years. The `report_year` column records the vintage of
-that snapshot (the most recent year included in the window). We plan to extend this
-methodology to cover all available years, rather than just the most recent window, in
-the near future.
+Each unit’s characteristics for a given `report_year` are computed from a trailing
+window of EPA CEMS data ending in that year – in production, the three most recently
+completed calendar years, so 2023 relies on 2021-2023 data, 2024 relies on 2022-2024,
+and so on. This is repeated independently for every calendar year that has a full
+trailing window of usable EPA CEMS data behind it.
+
+EPA CEMS’s first three years of reporting, 1995-1997, have poor and inconsistent unit
+coverage and are excluded from this analysis entirely as unusable. Combined with the
+three-year trailing window, that makes 2000 the earliest available `report_year` in
+production, not 1997.
+
+Because neighboring years’ windows overlap heavily (two of the three years feeding into
+2023 also feed into 2024), a unit’s characteristics tend to change gradually from one
+`report_year` to the next rather than jumping around, and a real shift in how a unit
+is operated will typically take a few years to fully show up in these estimates, rather
+than appearing immediately in the year it happened.
 
 <a id="load-factor-bins"></a>
 
